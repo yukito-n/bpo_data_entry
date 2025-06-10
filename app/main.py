@@ -146,6 +146,11 @@ class UserCreate(BaseModel):
     role: str
 
 
+class Register(BaseModel):
+    username: str
+    password: str
+
+
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
@@ -271,6 +276,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/register", response_model=dict)
+async def api_register(user: Register):
+    if get_user_by_username(user.username):
+        raise HTTPException(status_code=400, detail="Username already exists")
+    password_hash = get_password_hash(user.password)
+    created = create_user(user.username, password_hash, "Operator")
+    return {"id": created.id, "username": created.username, "role": created.role}
 
 
 @app.post("/users", response_model=dict)

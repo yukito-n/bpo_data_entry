@@ -10,6 +10,15 @@ def test_ui_served():
         assert 'text/html' in resp.headers['content-type']
 
 
+def test_user_registration():
+    with TestClient(app) as client:
+        resp = client.post('/register', json={'username': 'newop', 'password': 'pass'})
+        assert resp.status_code == 200
+        assert resp.json()['username'] == 'newop'
+        login = client.post('/token', data={'username': 'newop', 'password': 'pass'})
+        assert login.status_code == 200
+
+
 def test_user_workflow():
     with TestClient(app) as client:
         # Login

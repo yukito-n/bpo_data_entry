@@ -22,6 +22,16 @@ function showTab(name) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('showRegister').addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById('login-view').classList.add('is-hidden');
+        document.getElementById('register-view').classList.remove('is-hidden');
+    });
+    document.getElementById('cancelRegister').addEventListener('click', () => {
+        document.getElementById('register-view').classList.add('is-hidden');
+        document.getElementById('login-view').classList.remove('is-hidden');
+    });
+
     document.querySelectorAll('.tabs a').forEach(a => {
         a.addEventListener('click', e => {
             e.preventDefault();
@@ -44,6 +54,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             alert(err);
         }
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const body = {username: e.target.username.value, password: e.target.password.value};
+        try {
+            const res = await fetch('/register', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+            if (!res.ok) throw new Error(await res.text());
+            alert('Registration successful. Please log in.');
+            document.getElementById('cancelRegister').click();
+        } catch (err) { alert(err); }
     });
 
     document.getElementById('projectForm').addEventListener('submit', async e => {

@@ -28,6 +28,29 @@
             <div class="field has-text-centered">
                 <button class="button is-link" type="submit">Login</button>
             </div>
+            <p class="has-text-centered"><a id="showRegister" href="#">Create account</a></p>
+        </form>
+    </div>
+
+    <div id="register-view" class="is-hidden">
+        <h1 class="title has-text-centered">Register</h1>
+        <form id="registerForm" class="box" style="max-width:400px;margin:0 auto;">
+            <div class="field">
+                <label class="label">Username</label>
+                <div class="control">
+                    <input class="input" name="username" required>
+                </div>
+            </div>
+            <div class="field">
+                <label class="label">Password</label>
+                <div class="control">
+                    <input class="input" type="password" name="password" required>
+                </div>
+            </div>
+            <div class="field has-text-centered">
+                <button class="button is-primary" type="submit">Register</button>
+                <button class="button is-text" type="button" id="cancelRegister">Cancel</button>
+            </div>
         </form>
     </div>
 

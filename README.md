@@ -21,6 +21,7 @@ This repository contains a minimal implementation of a BPO Operations Management
 - A basic client portal exposes project status when accessed with an API key.
 - An improved web interface at `/ui` uses Bulma for a SaaS-like experience.
   After logging in, users can manage projects and batches directly from the page.
+- Users can register new accounts from the login screen. New accounts default to the "Operator" role.
 
 ## Running the server
 
