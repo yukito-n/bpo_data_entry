@@ -1,0 +1,9 @@
+version: '3.9'
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SECRET_KEY: change_this_secret
+      PORT: 8000

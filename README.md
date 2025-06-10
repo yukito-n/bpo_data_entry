@@ -46,3 +46,34 @@ A default administrator account is created automatically with username `admin` a
 The requirements pin `bcrypt==3.2.0` to avoid a compatibility issue with Passlib on some systems.
 
 This is an MVP using an in-memory database and is not meant for production use.
+
+## Docker deployment
+
+The project includes a `Dockerfile` and `docker-compose.yml` so it can be easily
+containerized. Build and run the container locally with:
+
+```bash
+docker build -t bpo-tool .
+docker run -p 8000:8080 -e SECRET_KEY=mys3cret bpo-tool
+```
+
+The container listens on the `PORT` environment variable (default `8080`). The
+compose file starts the app on port `8000` for development:
+
+```bash
+docker-compose up
+```
+
+### Deploying to Cloud Run
+
+1. Build and push the image to Google Container Registry or Artifact Registry.
+2. Create a Cloud Run service with the image and set `SECRET_KEY` as an
+   environment variable.
+
+### Deploying to AWS ECS
+
+1. Push the image to Amazon ECR.
+2. Create an ECS task definition using the image and expose the container port
+   `8080`. Set any required environment variables in the task definition.
+
+Both platforms will run the containerized app the same way it works locally.
