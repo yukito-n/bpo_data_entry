@@ -5,7 +5,7 @@ This repository contains a minimal implementation of the Phase 1 MVP for a BPO O
 ## Features
 
 - User authentication using OAuth2 and JWT tokens.
-- Admin endpoint to create users.
+- Admin endpoints to create, edit, and deactivate users.
 - Project and batch creation with status tracking.
 - Operators can start and stop timers on batches to log their work time and item counts.
 

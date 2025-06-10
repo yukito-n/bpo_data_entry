@@ -17,6 +17,18 @@ def test_user_workflow():
         data = response.json()
         assert data['username'] == 'operator1'
 
+        user_id = data['id']
+
+        # Update user
+        response = client.patch(f'/users/{user_id}', json={'role': 'Manager'}, headers=headers)
+        assert response.status_code == 200
+        assert response.json()['role'] == 'Manager'
+
+        # Deactivate user
+        response = client.post(f'/users/{user_id}/deactivate', headers=headers)
+        assert response.status_code == 200
+        assert response.json()['is_active'] is False
+
         # Create project and batch
         response = client.post('/projects', json={'name': 'Proj1', 'client_name': 'ClientA'}, headers=headers)
         proj_id = response.json()['id']

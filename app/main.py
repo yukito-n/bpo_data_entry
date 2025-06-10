@@ -5,9 +5,18 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from contextlib import asynccontextmanager
 
 from .models import User, Project, Batch, PerformanceLog, database, get_user_by_username
-from .models import create_user, get_user, update_batch_status, create_project, create_batch
+from .models import (
+    create_user,
+    get_user,
+    update_user,
+    deactivate_user,
+    update_batch_status,
+    create_project,
+    create_batch,
+)
 from .models import get_batch, log_performance
 
 SECRET_KEY = "secret"
@@ -16,20 +25,22 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ensure an admin user exists on startup."""
+    if not get_user_by_username("admin"):
+        create_user("admin", get_password_hash("admin123"), "Admin")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/")
 def read_root():
     """Simple heartbeat endpoint."""
     return {"message": "BPO API is running"}
-
-
-@app.on_event("startup")
-def create_default_admin():
-    """Ensure an admin user exists so the API can be used immediately."""
-    if not get_user_by_username("admin"):
-        create_user("admin", get_password_hash("admin123"), "Admin")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -43,6 +54,12 @@ class UserCreate(BaseModel):
     username: str
     password: str
     role: str
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    role: Optional[str] = None
 
 
 class ProjectCreate(BaseModel):
@@ -141,6 +158,29 @@ async def api_create_user(user: UserCreate, current_user: User = Depends(get_cur
     password_hash = get_password_hash(user.password)
     created = create_user(user.username, password_hash, user.role)
     return {"id": created.id, "username": created.username, "role": created.role}
+
+
+@app.patch("/users/{user_id}", response_model=dict)
+async def api_update_user(user_id: int, data: UserUpdate, current_user: User = Depends(get_current_user)):
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    user = get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    password_hash = get_password_hash(data.password) if data.password else None
+    update_user(user, username=data.username, password_hash=password_hash, role=data.role)
+    return {"id": user.id, "username": user.username, "role": user.role, "is_active": user.is_active}
+
+
+@app.post("/users/{user_id}/deactivate", response_model=dict)
+async def api_deactivate_user(user_id: int, current_user: User = Depends(get_current_user)):
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    user = get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    deactivate_user(user)
+    return {"id": user.id, "is_active": user.is_active}
 
 
 @app.get("/users", response_model=List[dict])

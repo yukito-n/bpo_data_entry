@@ -34,6 +34,20 @@ def create_user(username: str, password_hash: str, role: str) -> User:
     return user
 
 
+def update_user(user: User, *, username: Optional[str] = None, password_hash: Optional[str] = None, role: Optional[str] = None):
+    if username is not None:
+        user.username = username
+    if password_hash is not None:
+        user.password_hash = password_hash
+    if role is not None:
+        user.role = role
+    return user
+
+
+def deactivate_user(user: User):
+    user.is_active = False
+
+
 @dataclass
 class Project:
     id: int
