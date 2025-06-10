@@ -20,6 +20,7 @@ This repository contains a minimal implementation of a BPO Operations Management
 - Audit logs record critical actions and can be viewed by admins.
 - A basic client portal exposes project status when accessed with an API key.
 - An improved web interface at `/ui` uses Bulma for a SaaS-like experience.
+  After logging in, users can manage projects and batches directly from the page.
 
 ## Running the server
 

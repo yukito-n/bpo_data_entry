@@ -48,6 +48,15 @@ def test_user_workflow():
         assert response.status_code == 200
         batch_id = response.json()['id']
 
+        # List projects and batches
+        resp = client.get('/projects', headers=headers)
+        assert resp.status_code == 200
+        assert any(p['id'] == proj_id for p in resp.json())
+
+        resp = client.get('/batches', headers=headers)
+        assert resp.status_code == 200
+        assert any(b['id'] == batch_id for b in resp.json())
+
         # Update status
         response = client.put(f'/batches/{batch_id}/status', json={'status': 'Triage in Progress'}, headers=headers)
         assert response.status_code == 200

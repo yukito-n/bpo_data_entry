@@ -323,6 +323,15 @@ async def api_create_project(project: ProjectCreate, current_user: User = Depend
     return {"id": created.id, "name": created.name}
 
 
+@app.get("/projects", response_model=List[dict])
+async def api_list_projects(current_user: User = Depends(get_current_user)):
+    """Return all projects."""
+    return [
+        {"id": p.id, "name": p.name, "client_name": p.client_name}
+        for p in database["projects"]
+    ]
+
+
 @app.post("/batches", response_model=dict)
 async def api_create_batch(batch: BatchCreate, current_user: User = Depends(get_current_user)):
     check_permission(current_user, "create_batch")
@@ -338,6 +347,25 @@ async def api_update_status(batch_id: int, status: StatusUpdate, current_user: U
         raise HTTPException(status_code=404, detail="Batch not found")
     update_batch_status(batch, status.status)
     return {"status": batch.status}
+
+
+@app.get("/batches", response_model=List[dict])
+async def api_list_batches(project_id: Optional[int] = None, current_user: User = Depends(get_current_user)):
+    """Return batches, optionally filtered by project."""
+    batches = database["batches"]
+    if project_id is not None:
+        batches = [b for b in batches if b.project_id == project_id]
+    return [
+        {
+            "id": b.id,
+            "project_id": b.project_id,
+            "status": b.status,
+            "reception_date": b.reception_date.isoformat(),
+            "due_date": b.due_date.isoformat(),
+            "initial_volume": b.initial_volume,
+        }
+        for b in batches
+    ]
 
 
 @app.post("/performance/start", response_model=dict)

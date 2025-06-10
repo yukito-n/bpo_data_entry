@@ -1,13 +1,10 @@
 body {
     padding-top: 2rem;
 }
-#login, #content {
-    max-width: 700px;
+#login-view {
+    max-width: 500px;
     margin: 0 auto;
 }
-#output {
-    white-space: pre-wrap;
-    background: #f7f7f7;
-    padding: 1rem;
-    border: 1px solid #ccc;
+.tab-content {
+    padding-top: 1rem;
 }

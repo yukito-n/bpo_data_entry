@@ -5,18 +5,18 @@
     <title>BPO Operations Management</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
 </head>
 <body>
 <section class="section">
 <div class="container">
-    <h1 class="title has-text-centered">BPO Operations Management</h1>
-    <div id="login" class="box">
-        <h2 class="subtitle">Login</h2>
-        <form id="loginForm">
+    <div id="login-view">
+        <h1 class="title has-text-centered">Login</h1>
+        <form id="loginForm" class="box" style="max-width:400px;margin:0 auto;">
             <div class="field">
                 <label class="label">Username</label>
                 <div class="control">
-                    <input class="input" type="text" name="username" required>
+                    <input class="input" name="username" required>
                 </div>
             </div>
             <div class="field">
@@ -25,121 +25,73 @@
                     <input class="input" type="password" name="password" required>
                 </div>
             </div>
-            <div class="field is-grouped">
-                <div class="control">
-                    <button class="button is-link" type="submit">Login</button>
-                </div>
+            <div class="field has-text-centered">
+                <button class="button is-link" type="submit">Login</button>
             </div>
         </form>
     </div>
-    <div id="content" class="box" style="display:none">
-        <h2 class="subtitle">Actions</h2>
-        <form id="createProjectForm">
-            <h3 class="subtitle is-6">Create Project</h3>
-            <div class="field">
-                <label class="label">Name</label>
-                <div class="control">
-                    <input class="input" type="text" name="name" required>
+
+    <div id="app-view" class="is-hidden">
+        <nav class="tabs is-boxed">
+            <ul>
+                <li class="is-active"><a data-tab="projects">Projects</a></li>
+                <li><a data-tab="batches">Batches</a></li>
+            </ul>
+        </nav>
+        <div id="projects" class="tab-content">
+            <form id="projectForm" class="box">
+                <h2 class="subtitle">Create Project</h2>
+                <div class="field">
+                    <label class="label">Name</label>
+                    <input class="input" name="name" required>
                 </div>
-            </div>
-            <div class="field">
-                <label class="label">Client</label>
-                <div class="control">
-                    <input class="input" type="text" name="client" required>
+                <div class="field">
+                    <label class="label">Client</label>
+                    <input class="input" name="client" required>
                 </div>
-            </div>
-            <div class="field">
-                <div class="control">
-                    <button class="button is-primary" type="submit">Create Project</button>
+                <div class="field has-text-right">
+                    <button class="button is-primary" type="submit">Create</button>
                 </div>
-            </div>
-        </form>
-        <form id="createBatchForm">
-            <h3 class="subtitle is-6">Create Batch</h3>
-            <div class="field">
-                <label class="label">Project ID</label>
-                <div class="control">
+            </form>
+            <table class="table is-fullwidth" id="projectTable">
+                <thead>
+                    <tr><th>ID</th><th>Name</th><th>Client</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="batches" class="tab-content is-hidden">
+            <form id="batchForm" class="box">
+                <h2 class="subtitle">Create Batch</h2>
+                <div class="field">
+                    <label class="label">Project ID</label>
                     <input class="input" type="number" name="project_id" required>
                 </div>
-            </div>
-            <div class="field">
-                <label class="label">Reception Date</label>
-                <div class="control">
+                <div class="field">
+                    <label class="label">Reception Date</label>
                     <input class="input" type="datetime-local" name="reception_date" required>
                 </div>
-            </div>
-            <div class="field">
-                <label class="label">Due Date</label>
-                <div class="control">
+                <div class="field">
+                    <label class="label">Due Date</label>
                     <input class="input" type="datetime-local" name="due_date" required>
                 </div>
-            </div>
-            <div class="field">
-                <label class="label">Volume</label>
-                <div class="control">
+                <div class="field">
+                    <label class="label">Volume</label>
                     <input class="input" type="number" name="volume" required>
                 </div>
-            </div>
-            <div class="field">
-                <div class="control">
-                    <button class="button is-primary" type="submit">Create Batch</button>
+                <div class="field has-text-right">
+                    <button class="button is-primary" type="submit">Create</button>
                 </div>
-            </div>
-        </form>
-        <pre id="output" class="mt-4"></pre>
+            </form>
+            <table class="table is-fullwidth" id="batchTable">
+                <thead>
+                    <tr><th>ID</th><th>Project</th><th>Status</th><th>Due</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 </div>
 </section>
-<script>
-let token = null;
-async function request(path, method, body){
-    return fetch(path, {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify(body)
-    });
-}
-
-document.getElementById('loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const resp = await fetch('/token', {method: 'POST', body: fd});
-    if(resp.ok){
-        const data = await resp.json();
-        token = data.access_token;
-        document.getElementById('login').style.display = 'none';
-        document.getElementById('content').style.display = 'block';
-    } else {
-        alert('Login failed');
-    }
-});
-
-document.getElementById('createProjectForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const data = {
-        name: e.target.name.value,
-        client_name: e.target.client.value
-    };
-    const resp = await request('/projects', 'POST', data);
-    const out = await resp.json();
-    document.getElementById('output').textContent = JSON.stringify(out, null, 2);
-});
-
-document.getElementById('createBatchForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const data = {
-        project_id: parseInt(e.target.project_id.value),
-        reception_date: new Date(e.target.reception_date.value).toISOString(),
-        due_date: new Date(e.target.due_date.value).toISOString(),
-        initial_volume: parseInt(e.target.volume.value)
-    };
-    const resp = await request('/batches', 'POST', data);
-    const out = await resp.json();
-    document.getElementById('output').textContent = JSON.stringify(out, null, 2);
-});
-</script>
 </body>
 </html>
