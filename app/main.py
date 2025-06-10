@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +22,8 @@ from .models import (
     Issue,
     Article,
     database,
+    AuditLog,
+    IntegrationKey,
     get_user_by_username,
 )
 from .models import (
@@ -44,6 +46,10 @@ from .models import (
     get_issues,
     create_article,
     list_articles,
+    log_audit,
+    create_api_key,
+    get_api_key,
+    get_audit_logs,
 )
 from .models import get_batch, log_performance
 
@@ -52,6 +58,55 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Simple RBAC permissions
+PERMISSIONS = {
+    "Admin": {
+        "create_user",
+        "edit_user",
+        "deactivate_user",
+        "view_users",
+        "create_project",
+        "create_batch",
+        "assign_operator",
+        "create_shift",
+        "view_dashboard",
+        "view_quality",
+        "generate_report",
+        "create_article",
+        "manage_issue",
+        "create_api_key",
+        "view_audit",
+        "export_workhours",
+    },
+    "Manager": {
+        "create_project",
+        "create_batch",
+        "assign_operator",
+        "create_shift",
+        "view_dashboard",
+        "view_quality",
+        "generate_report",
+        "create_article",
+        "manage_issue",
+    },
+    "Operator": {
+        "create_issue",
+    },
+}
+
+
+def check_permission(user: User, action: str):
+    allowed = PERMISSIONS.get(user.role, set())
+    if action not in allowed:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+async def require_api_key(x_api_key: str = Header(...)) -> IntegrationKey:
+    key = get_api_key(x_api_key)
+    if not key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return key
 
 
 @asynccontextmanager
@@ -220,40 +275,39 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.post("/users", response_model=dict)
 async def api_create_user(user: UserCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_user")
     password_hash = get_password_hash(user.password)
     created = create_user(user.username, password_hash, user.role)
+    log_audit(current_user.id, f"create_user:{created.id}")
     return {"id": created.id, "username": created.username, "role": created.role}
 
 
 @app.patch("/users/{user_id}", response_model=dict)
 async def api_update_user(user_id: int, data: UserUpdate, current_user: User = Depends(get_current_user)):
-    if current_user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "edit_user")
     user = get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     password_hash = get_password_hash(data.password) if data.password else None
     update_user(user, username=data.username, password_hash=password_hash, role=data.role)
+    log_audit(current_user.id, f"edit_user:{user_id}")
     return {"id": user.id, "username": user.username, "role": user.role, "is_active": user.is_active}
 
 
 @app.post("/users/{user_id}/deactivate", response_model=dict)
 async def api_deactivate_user(user_id: int, current_user: User = Depends(get_current_user)):
-    if current_user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "deactivate_user")
     user = get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     deactivate_user(user)
+    log_audit(current_user.id, f"deactivate_user:{user_id}")
     return {"id": user.id, "is_active": user.is_active}
 
 
 @app.get("/users", response_model=List[dict])
 async def api_get_users(current_user: User = Depends(get_current_user)):
-    if current_user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "view_users")
     users = [
         {"id": u.id, "username": u.username, "role": u.role, "is_active": u.is_active}
         for u in database['users']
@@ -263,17 +317,17 @@ async def api_get_users(current_user: User = Depends(get_current_user)):
 
 @app.post("/projects", response_model=dict)
 async def api_create_project(project: ProjectCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_project")
     created = create_project(project.name, project.client_name)
+    log_audit(current_user.id, f"create_project:{created.id}")
     return {"id": created.id, "name": created.name}
 
 
 @app.post("/batches", response_model=dict)
 async def api_create_batch(batch: BatchCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_batch")
     created = create_batch(batch.project_id, batch.reception_date, batch.due_date, batch.initial_volume)
+    log_audit(current_user.id, f"create_batch:{created.id}")
     return {"id": created.id, "status": created.status}
 
 
@@ -311,8 +365,7 @@ async def api_stop_performance(stop: PerformanceStop, current_user: User = Depen
 
 @app.post("/assignments", response_model=dict)
 async def api_assign_operator(assignment: AssignmentCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "assign_operator")
     created = assign_operator(assignment.user_id, assignment.batch_id)
     return {"id": created.id, "user_id": created.user_id, "batch_id": created.batch_id}
 
@@ -327,9 +380,9 @@ async def api_get_assignments(user_id: int, current_user: User = Depends(get_cur
 
 @app.post("/shifts", response_model=dict)
 async def api_create_shift(shift: ShiftCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_shift")
     created = create_shift(shift.user_id, shift.start_time, shift.end_time)
+    log_audit(current_user.id, f"create_shift:{created.id}")
     return {"id": created.id}
 
 
@@ -354,16 +407,14 @@ async def api_get_shifts(user_id: Optional[int] = None, current_user: User = Dep
 
 @app.post("/quality", response_model=dict)
 async def api_log_quality(q: QualityCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "view_quality")
     created = log_quality(q.batch_id, q.operator_id, q.error_type)
     return {"id": created.id}
 
 
 @app.get("/quality/stats", response_model=dict)
 async def api_quality_stats(current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "view_quality")
     return {
         "by_operator": error_counts_by_operator(),
         "by_project": error_counts_by_project(),
@@ -372,8 +423,7 @@ async def api_quality_stats(current_user: User = Depends(get_current_user)):
 
 @app.post("/issues", response_model=dict)
 async def api_create_issue(issue: IssueCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role != "Operator":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_issue")
     created = create_issue(issue.batch_id, issue.description, current_user.id, issue.assigned_to)
     return {"id": created.id}
 
@@ -383,16 +433,15 @@ async def api_update_issue_status(issue_id: int, data: IssueUpdate, current_user
     issue = next((i for i in database['issues'] if i.id == issue_id), None)
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
-    if current_user.role not in ["Admin", "Manager"] and current_user.id != issue.assigned_to:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.id != issue.assigned_to:
+        check_permission(current_user, "manage_issue")
     update_issue_status(issue, data.status)
     return {"status": issue.status}
 
 
 @app.get("/issues", response_model=List[dict])
 async def api_get_issues_endpoint(current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "manage_issue")
     issues = get_issues(current_user.id if current_user.role == "Manager" else None)
     return [
         {
@@ -408,8 +457,7 @@ async def api_get_issues_endpoint(current_user: User = Depends(get_current_user)
 
 @app.post("/articles", response_model=dict)
 async def api_create_article(article: ArticleCreate, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "create_article")
     created = create_article(article.title, article.content)
     return {"id": created.id}
 
@@ -425,8 +473,7 @@ async def api_list_articles(current_user: User = Depends(get_current_user)):
 
 @app.get("/report")
 async def api_report(month: str, current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "generate_report")
     year, mon = map(int, month.split("-"))
     start = datetime(year, mon, 1)
     if mon == 12:
@@ -451,13 +498,13 @@ async def api_report(month: str, current_user: User = Depends(get_current_user))
         cost = s["hours"] * HOURLY_RATE
         writer.writerow([uid, s["items"], f"{s['hours']:.2f}", s["errors"], f"{cost:.2f}"])
     output.seek(0)
+    log_audit(current_user.id, "generate_report")
     return StreamingResponse(output, media_type="text/csv")
 
 
 @app.get("/dashboard", response_model=dict)
 async def api_dashboard(current_user: User = Depends(get_current_user)):
-    if current_user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    check_permission(current_user, "view_dashboard")
     daily_totals = {}
     for log in database['performance_logs']:
         if log.end_time:
@@ -512,4 +559,58 @@ async def api_dashboard(current_user: User = Depends(get_current_user)):
         "leaderboard": leaderboard,
         "error_rates": error_rates,
         "cost_analysis": cost_analysis,
+    }
+
+
+@app.post("/api_keys", response_model=dict)
+async def api_create_api_key(description: str, current_user: User = Depends(get_current_user)):
+    check_permission(current_user, "create_api_key")
+    key = create_api_key(description)
+    log_audit(current_user.id, f"create_api_key:{key.id}")
+    return {"key": key.key}
+
+
+@app.get("/audit_logs", response_model=List[dict])
+async def api_get_logs(current_user: User = Depends(get_current_user)):
+    check_permission(current_user, "view_audit")
+    logs = get_audit_logs()
+    return [
+        {
+            "id": l.id,
+            "user_id": l.user_id,
+            "action": l.action,
+            "timestamp": l.timestamp.isoformat(),
+        }
+        for l in logs
+    ]
+
+
+@app.post("/integration/batches", response_model=dict)
+async def api_integration_batch(batch: BatchCreate, key: IntegrationKey = Depends(require_api_key)):
+    created = create_batch(batch.project_id, batch.reception_date, batch.due_date, batch.initial_volume)
+    return {"id": created.id}
+
+
+@app.get("/integration/workhours")
+async def api_export_workhours(key: IntegrationKey = Depends(require_api_key)):
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["user_id", "batch_id", "items", "hours"])
+    for log in database['performance_logs']:
+        if log.end_time:
+            hours = (log.end_time - log.start_time).total_seconds() / 3600
+            writer.writerow([log.user_id, log.batch_id, log.items_processed, f"{hours:.2f}"])
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv")
+
+
+@app.get("/client/projects/{project_id}", response_model=dict)
+async def client_get_project(project_id: int, key: IntegrationKey = Depends(require_api_key)):
+    project = next((p for p in database['projects'] if p.id == project_id), None)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    batches = [b for b in database['batches'] if b.project_id == project_id]
+    return {
+        "project": {"id": project.id, "name": project.name, "client_name": project.client_name},
+        "batches": [{"id": b.id, "status": b.status} for b in batches],
     }

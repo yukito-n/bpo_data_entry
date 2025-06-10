@@ -126,3 +126,24 @@ def test_phase2_features():
         assert resp.status_code == 200
         resp = client.get('/articles', headers=op_headers)
         assert resp.status_code == 200
+
+
+def test_phase4_integration_and_audit():
+    with TestClient(app) as client:
+        resp = client.post('/token', data={'username': 'admin', 'password': 'admin123'})
+        token = resp.json()['access_token']
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # create api key
+        resp = client.post('/api_keys', params={'description': 'ci'}, headers=headers)
+        assert resp.status_code == 200
+        key = resp.json()['key']
+
+        api_headers = {'X-API-Key': key}
+        resp = client.get('/integration/workhours', headers=api_headers)
+        assert resp.status_code == 200
+        assert 'text/csv' in resp.headers['content-type']
+
+        resp = client.get('/audit_logs', headers=headers)
+        assert resp.status_code == 200
+        assert len(resp.json()) > 0

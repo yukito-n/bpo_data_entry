@@ -15,6 +15,10 @@ This repository contains a minimal implementation of a BPO Operations Management
 - Managers can create knowledge base articles searchable by all users.
 - An analytics endpoint reports error rates, performance trends, and cost estimates.
 - A monthly CSV performance report can be generated.
+- Role-based permissions restrict actions by user role.
+- API keys enable integration endpoints for batch import and work-hour export.
+- Audit logs record critical actions and can be viewed by admins.
+- A basic client portal exposes project status when accessed with an API key.
 
 ## Running the server
 

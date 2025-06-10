@@ -13,6 +13,8 @@ database = {
     'quality_logs': [],
     'issues': [],
     'articles': [],
+    'audit_logs': [],
+    'api_keys': [],
 }
 
 
@@ -231,4 +233,52 @@ def error_counts_by_project() -> dict:
             proj = counts.setdefault(batch.project_id, {})
             proj[q.error_type] = proj.get(q.error_type, 0) + 1
     return counts
+
+
+@dataclass
+class AuditLog:
+    id: int
+    user_id: int
+    action: str
+    timestamp: datetime
+
+
+def log_audit(user_id: int, action: str) -> AuditLog:
+    alog = AuditLog(
+        id=len(database['audit_logs']) + 1,
+        user_id=user_id,
+        action=action,
+        timestamp=datetime.utcnow(),
+    )
+    database['audit_logs'].append(alog)
+    return alog
+
+
+def get_audit_logs(user_id: Optional[int] = None) -> List[AuditLog]:
+    logs = database['audit_logs']
+    if user_id is not None:
+        return [l for l in logs if l.user_id == user_id]
+    return logs
+
+
+@dataclass
+class IntegrationKey:
+    id: int
+    key: str
+    description: str
+
+
+def create_api_key(description: str) -> IntegrationKey:
+    import secrets
+
+    key = secrets.token_hex(16)
+    api_key = IntegrationKey(
+        id=len(database['api_keys']) + 1, key=key, description=description
+    )
+    database['api_keys'].append(api_key)
+    return api_key
+
+
+def get_api_key(key: str) -> Optional[IntegrationKey]:
+    return next((k for k in database['api_keys'] if k.key == key), None)
 
