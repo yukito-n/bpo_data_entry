@@ -1,14 +1,15 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime, timedelta
+from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from .models import User, Project, Batch, PerformanceLog, database, get_user_by_username
-from .models import create_user, get_user, update_batch_status, create_project, create_batch
-from .models import get_batch, log_performance
+from db.session import Base, engine, get_session
+from models import User, Project, Batch, PerformanceLog
 
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
@@ -20,10 +21,19 @@ app = FastAPI()
 
 
 @app.on_event("startup")
-def create_default_admin():
-    """Ensure an admin user exists so the API can be used immediately."""
-    if not get_user_by_username("admin"):
-        create_user("admin", get_password_hash("admin123"), "Admin")
+def startup():
+    Base.metadata.create_all(bind=engine)
+    db = next(get_session())
+    if not db.query(User).filter(User.username == "admin").first():
+        admin = User(
+            username="admin",
+            password_hash=pwd_context.hash("admin123"),
+            role="Admin",
+            is_active=True,
+        )
+        db.add(admin)
+        db.commit()
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -73,8 +83,12 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-def authenticate_user(username: str, password: str):
-    user = get_user_by_username(username)
+def get_user_by_username(db: Session, username: str) -> Optional[User]:
+    return db.query(User).filter(User.username == username).first()
+
+
+def authenticate_user(db: Session, username: str, password: str):
+    user = get_user_by_username(db, username)
     if not user:
         return False
     if not verify_password(password, user.password_hash):
@@ -84,16 +98,15 @@ def authenticate_user(username: str, password: str):
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_session)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -106,15 +119,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = get_user_by_username(username)
+    user = get_user_by_username(db, username)
     if user is None:
         raise credentials_exception
     return user
 
 
 @app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_session)
+):
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -129,52 +144,96 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 @app.post("/users", response_model=dict)
-async def api_create_user(user: UserCreate, current_user: User = Depends(get_current_user)):
+async def api_create_user(
+    user: UserCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Not authorized")
     password_hash = get_password_hash(user.password)
-    created = create_user(user.username, password_hash, user.role)
+    created = User(username=user.username, password_hash=password_hash, role=user.role)
+    db.add(created)
+    db.commit()
+    db.refresh(created)
     return {"id": created.id, "username": created.username, "role": created.role}
 
 
 @app.get("/users", response_model=List[dict])
-async def api_get_users(current_user: User = Depends(get_current_user)):
+async def api_get_users(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_session)
+):
     if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Not authorized")
     users = [
-        {"id": u.id, "username": u.username, "role": u.role, "is_active": u.is_active}
-        for u in database['users']
+        {
+            "id": u.id,
+            "username": u.username,
+            "role": u.role,
+            "is_active": u.is_active,
+        }
+        for u in db.query(User).all()
     ]
     return users
 
 
 @app.post("/projects", response_model=dict)
-async def api_create_project(project: ProjectCreate, current_user: User = Depends(get_current_user)):
+async def api_create_project(
+    project: ProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     if current_user.role not in ["Admin", "Manager"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    created = create_project(project.name, project.client_name)
+    created = Project(name=project.name, client_name=project.client_name)
+    db.add(created)
+    db.commit()
+    db.refresh(created)
     return {"id": created.id, "name": created.name}
 
 
 @app.post("/batches", response_model=dict)
-async def api_create_batch(batch: BatchCreate, current_user: User = Depends(get_current_user)):
+async def api_create_batch(
+    batch: BatchCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     if current_user.role not in ["Admin", "Manager"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    created = create_batch(batch.project_id, batch.reception_date, batch.due_date, batch.initial_volume)
+    created = Batch(
+        project_id=batch.project_id,
+        reception_date=batch.reception_date,
+        due_date=batch.due_date,
+        initial_volume=batch.initial_volume,
+    )
+    db.add(created)
+    db.commit()
+    db.refresh(created)
     return {"id": created.id, "status": created.status}
 
 
 @app.put("/batches/{batch_id}/status")
-async def api_update_status(batch_id: int, status: StatusUpdate, current_user: User = Depends(get_current_user)):
-    batch = get_batch(batch_id)
+async def api_update_status(
+    batch_id: int,
+    status: StatusUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
-    update_batch_status(batch, status.status)
+    batch.status = status.status
+    db.commit()
+    db.refresh(batch)
     return {"status": batch.status}
 
 
 @app.post("/performance/start", response_model=dict)
-async def api_start_performance(start: PerformanceStart, current_user: User = Depends(get_current_user)):
+async def api_start_performance(
+    start: PerformanceStart,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     log = PerformanceLog(
         user_id=current_user.id,
         batch_id=start.batch_id,
@@ -182,15 +241,27 @@ async def api_start_performance(start: PerformanceStart, current_user: User = De
         end_time=None,
         items_processed=0,
     )
-    database['performance_logs'].append(log)
+    db.add(log)
+    db.commit()
+    db.refresh(log)
     return {"log_id": log.id}
 
 
 @app.post("/performance/stop", response_model=dict)
-async def api_stop_performance(stop: PerformanceStop, current_user: User = Depends(get_current_user)):
-    log = next((l for l in database['performance_logs'] if l.id == stop.log_id and l.user_id == current_user.id), None)
+async def api_stop_performance(
+    stop: PerformanceStop,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    log = (
+        db.query(PerformanceLog)
+        .filter(PerformanceLog.id == stop.log_id, PerformanceLog.user_id == current_user.id)
+        .first()
+    )
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
     log.end_time = datetime.utcnow()
     log.items_processed = stop.items_processed
+    db.commit()
+    db.refresh(log)
     return {"duration": (log.end_time - log.start_time).total_seconds()}

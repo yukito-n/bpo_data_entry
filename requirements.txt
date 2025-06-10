@@ -4,3 +4,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 httpx
 python-multipart
+
+sqlalchemy
+alembic
