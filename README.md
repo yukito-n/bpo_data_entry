@@ -23,6 +23,7 @@ uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000` and the interactive docs can be accessed at `/docs`.
+For a simple built-in interface, open `http://localhost:8000/ui` after starting the server.
 
 A default administrator account is created automatically with username `admin` and password `admin123`. Use these credentials to log in and create additional users.
 

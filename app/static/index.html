@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>BPO Operations Management</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        form { margin-bottom: 1.5em; padding: 1em; border: 1px solid #ccc; }
+        label { display: block; margin-top: 0.5em; }
+    </style>
+</head>
+<body>
+<h1>BPO Operations Management</h1>
+<div id="login">
+    <h2>Login</h2>
+    <form id="loginForm">
+        <label>Username: <input type="text" name="username" required></label>
+        <label>Password: <input type="password" name="password" required></label>
+        <button type="submit">Login</button>
+    </form>
+</div>
+<div id="content" style="display:none">
+    <h2>Actions</h2>
+    <form id="createProjectForm">
+        <h3>Create Project</h3>
+        <label>Name: <input type="text" name="name" required></label>
+        <label>Client: <input type="text" name="client" required></label>
+        <button type="submit">Create Project</button>
+    </form>
+    <form id="createBatchForm">
+        <h3>Create Batch</h3>
+        <label>Project ID: <input type="number" name="project_id" required></label>
+        <label>Reception Date: <input type="datetime-local" name="reception_date" required></label>
+        <label>Due Date: <input type="datetime-local" name="due_date" required></label>
+        <label>Volume: <input type="number" name="volume" required></label>
+        <button type="submit">Create Batch</button>
+    </form>
+    <pre id="output"></pre>
+</div>
+<script>
+let token = null;
+
+async function request(path, method, body){
+    return fetch(path, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify(body)
+    });
+}
+
+document.getElementById('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const resp = await fetch('/token', {method: 'POST', body: fd});
+    if(resp.ok){
+        const data = await resp.json();
+        token = data.access_token;
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+    } else {
+        alert('Login failed');
+    }
+});
+
+document.getElementById('createProjectForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = {
+        name: e.target.name.value,
+        client_name: e.target.client.value
+    };
+    const resp = await request('/projects', 'POST', data);
+    const out = await resp.json();
+    document.getElementById('output').textContent = JSON.stringify(out, null, 2);
+});
+
+document.getElementById('createBatchForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const data = {
+        project_id: parseInt(e.target.project_id.value),
+        reception_date: new Date(e.target.reception_date.value).toISOString(),
+        due_date: new Date(e.target.due_date.value).toISOString(),
+        initial_volume: parseInt(e.target.volume.value)
+    };
+    const resp = await request('/batches', 'POST', data);
+    const out = await resp.json();
+    document.getElementById('output').textContent = JSON.stringify(out, null, 2);
+});
+</script>
+</body>
+</html>

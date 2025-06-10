@@ -3,6 +3,13 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def test_ui_served():
+    with TestClient(app) as client:
+        resp = client.get('/ui')
+        assert resp.status_code == 200
+        assert 'text/html' in resp.headers['content-type']
+
+
 def test_user_workflow():
     with TestClient(app) as client:
         # Login
