@@ -19,6 +19,7 @@ This repository contains a minimal implementation of a BPO Operations Management
 - API keys enable integration endpoints for batch import and work-hour export.
 - Audit logs record critical actions and can be viewed by admins.
 - A basic client portal exposes project status when accessed with an API key.
+- An improved web interface at `/ui` uses Bulma for a SaaS-like experience.
 
 ## Running the server
 
@@ -31,7 +32,7 @@ uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000` and the interactive docs can be accessed at `/docs`.
-For a simple built-in interface, open `http://localhost:8000/ui` after starting the server.
+For a simple built-in interface, open `http://localhost:8000/ui` after starting the server. The page now includes a responsive layout similar to SaaS tools like **kintone**.
 
 A default administrator account is created automatically with username `admin` and password `admin123`. Use these credentials to log in and create additional users.
 
