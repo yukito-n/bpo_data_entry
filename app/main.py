@@ -18,6 +18,13 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI()
 
+
+@app.on_event("startup")
+def create_default_admin():
+    """Ensure an admin user exists so the API can be used immediately."""
+    if not get_user_by_username("admin"):
+        create_user("admin", get_password_hash("admin123"), "Admin")
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 

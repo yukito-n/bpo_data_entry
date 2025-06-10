@@ -11,13 +11,16 @@ This repository contains a minimal implementation of the Phase 1 MVP for a BPO O
 
 ## Running the server
 
-Install the dependencies and run the FastAPI server:
+Install the dependencies and run the FastAPI server from the project root:
 
 ```bash
 pip install fastapi uvicorn[standard] python-jose[cryptography] passlib[bcrypt]
+cd path/to/bpo_data_entry
 uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000` and the interactive docs can be accessed at `/docs`.
+
+A default administrator account is created automatically with username `admin` and password `admin123`. Use these credentials to log in and create additional users.
 
 This is an MVP using an in-memory database and is not meant for production use.
