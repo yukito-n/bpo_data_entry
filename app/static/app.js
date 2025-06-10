@@ -21,7 +21,7 @@ function showTab(name) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
     document.getElementById('showRegister').addEventListener('click', e => {
         e.preventDefault();
         document.getElementById('login-view').classList.add('is-hidden');
@@ -91,7 +91,13 @@ document.addEventListener('DOMContentLoaded', () => {
             loadBatches();
         } catch (err) { alert(err); }
     });
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
 
 async function loadProjects() {
     try {
