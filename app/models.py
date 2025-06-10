@@ -8,6 +8,9 @@ database = {
     'projects': [],
     'batches': [],
     'performance_logs': [],
+    'assignments': [],
+    'shifts': [],
+    'quality_logs': [],
 }
 
 
@@ -105,3 +108,52 @@ def log_performance(user_id: int, batch_id: int, items_processed: int, start_tim
     log = PerformanceLog(user_id=user_id, batch_id=batch_id, items_processed=items_processed, start_time=start_time, end_time=end_time)
     database['performance_logs'].append(log)
     return log
+
+
+@dataclass
+class Assignment:
+    id: int
+    user_id: int
+    batch_id: int
+
+
+def assign_operator(user_id: int, batch_id: int) -> Assignment:
+    assignment = Assignment(id=len(database['assignments']) + 1, user_id=user_id, batch_id=batch_id)
+    database['assignments'].append(assignment)
+    return assignment
+
+
+def get_assignments_for_user(user_id: int) -> List[Assignment]:
+    return [a for a in database['assignments'] if a.user_id == user_id]
+
+
+@dataclass
+class Shift:
+    id: int
+    user_id: int
+    start_time: datetime
+    end_time: datetime
+
+
+def create_shift(user_id: int, start_time: datetime, end_time: datetime) -> Shift:
+    shift = Shift(id=len(database['shifts']) + 1, user_id=user_id, start_time=start_time, end_time=end_time)
+    database['shifts'].append(shift)
+    return shift
+
+
+def get_shifts_for_user(user_id: int) -> List[Shift]:
+    return [s for s in database['shifts'] if s.user_id == user_id]
+
+
+@dataclass
+class QualityLog:
+    id: int
+    batch_id: int
+    operator_id: int
+    errors: int
+
+
+def log_quality(batch_id: int, operator_id: int, errors: int) -> QualityLog:
+    qlog = QualityLog(id=len(database['quality_logs']) + 1, batch_id=batch_id, operator_id=operator_id, errors=errors)
+    database['quality_logs'].append(qlog)
+    return qlog

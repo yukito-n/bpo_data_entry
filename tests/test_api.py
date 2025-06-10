@@ -45,3 +45,58 @@ def test_user_workflow():
         response = client.put(f'/batches/{batch_id}/status', json={'status': 'Triage in Progress'}, headers=headers)
         assert response.status_code == 200
         assert response.json()['status'] == 'Triage in Progress'
+
+
+def test_phase2_features():
+    with TestClient(app) as client:
+        # Admin login
+        resp = client.post('/token', data={'username': 'admin', 'password': 'admin123'})
+        token = resp.json()['access_token']
+        admin_headers = {'Authorization': f'Bearer {token}'}
+
+        # Create operator
+        resp = client.post('/users', json={'username': 'op2', 'password': 'pass2', 'role': 'Operator'}, headers=admin_headers)
+        op_id = resp.json()['id']
+
+        # Create project and batch
+        resp = client.post('/projects', json={'name': 'Proj2', 'client_name': 'ClientB'}, headers=admin_headers)
+        proj_id = resp.json()['id']
+        resp = client.post('/batches', json={
+            'project_id': proj_id,
+            'reception_date': '2024-01-03T00:00:00Z',
+            'due_date': '2024-01-04T00:00:00Z',
+            'initial_volume': 5
+        }, headers=admin_headers)
+        batch_id = resp.json()['id']
+
+        # Assign operator
+        resp = client.post('/assignments', json={'user_id': op_id, 'batch_id': batch_id}, headers=admin_headers)
+        assert resp.status_code == 200
+
+        # Create shift
+        resp = client.post('/shifts', json={'user_id': op_id, 'start_time': '2024-01-03T09:00:00Z', 'end_time': '2024-01-03T17:00:00Z'}, headers=admin_headers)
+        assert resp.status_code == 200
+
+        # Operator login and get shifts
+        resp = client.post('/token', data={'username': 'op2', 'password': 'pass2'})
+        op_token = resp.json()['access_token']
+        op_headers = {'Authorization': f'Bearer {op_token}'}
+        resp = client.get('/shifts', headers=op_headers)
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+        # Performance log
+        resp = client.post('/performance/start', json={'batch_id': batch_id}, headers=op_headers)
+        log_id = resp.json()['log_id']
+        resp = client.post('/performance/stop', json={'batch_id': batch_id, 'items_processed': 5, 'log_id': log_id}, headers=op_headers)
+        assert resp.status_code == 200
+
+        # Log quality
+        resp = client.post('/quality', json={'batch_id': batch_id, 'operator_id': op_id, 'errors': 1}, headers=admin_headers)
+        assert resp.status_code == 200
+
+        # Dashboard
+        resp = client.get('/dashboard', headers=admin_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 'leaderboard' in data

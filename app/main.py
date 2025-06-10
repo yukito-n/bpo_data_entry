@@ -7,7 +7,17 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from contextlib import asynccontextmanager
 
-from .models import User, Project, Batch, PerformanceLog, database, get_user_by_username
+from .models import (
+    User,
+    Project,
+    Batch,
+    PerformanceLog,
+    Assignment,
+    Shift,
+    QualityLog,
+    database,
+    get_user_by_username,
+)
 from .models import (
     create_user,
     get_user,
@@ -16,6 +26,11 @@ from .models import (
     update_batch_status,
     create_project,
     create_batch,
+    assign_operator,
+    get_assignments_for_user,
+    create_shift,
+    get_shifts_for_user,
+    log_quality,
 )
 from .models import get_batch, log_performance
 
@@ -86,6 +101,23 @@ class PerformanceStop(BaseModel):
     batch_id: int
     items_processed: int
     log_id: int
+
+
+class AssignmentCreate(BaseModel):
+    user_id: int
+    batch_id: int
+
+
+class ShiftCreate(BaseModel):
+    user_id: int
+    start_time: datetime
+    end_time: datetime
+
+
+class QualityCreate(BaseModel):
+    batch_id: int
+    operator_id: int
+    errors: int
 
 
 def verify_password(plain_password, hashed_password):
@@ -240,3 +272,99 @@ async def api_stop_performance(stop: PerformanceStop, current_user: User = Depen
     log.end_time = datetime.utcnow()
     log.items_processed = stop.items_processed
     return {"duration": (log.end_time - log.start_time).total_seconds()}
+
+
+@app.post("/assignments", response_model=dict)
+async def api_assign_operator(assignment: AssignmentCreate, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    created = assign_operator(assignment.user_id, assignment.batch_id)
+    return {"id": created.id, "user_id": created.user_id, "batch_id": created.batch_id}
+
+
+@app.get("/assignments/{user_id}", response_model=List[dict])
+async def api_get_assignments(user_id: int, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"] and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    assigns = get_assignments_for_user(user_id)
+    return [{"id": a.id, "user_id": a.user_id, "batch_id": a.batch_id} for a in assigns]
+
+
+@app.post("/shifts", response_model=dict)
+async def api_create_shift(shift: ShiftCreate, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    created = create_shift(shift.user_id, shift.start_time, shift.end_time)
+    return {"id": created.id}
+
+
+@app.get("/shifts", response_model=List[dict])
+async def api_get_shifts(user_id: Optional[int] = None, current_user: User = Depends(get_current_user)):
+    if user_id is not None:
+        if current_user.role not in ["Admin", "Manager"] and current_user.id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    else:
+        user_id = current_user.id
+    shifts = get_shifts_for_user(user_id)
+    return [
+        {
+            "id": s.id,
+            "user_id": s.user_id,
+            "start_time": s.start_time.isoformat(),
+            "end_time": s.end_time.isoformat(),
+        }
+        for s in shifts
+    ]
+
+
+@app.post("/quality", response_model=dict)
+async def api_log_quality(q: QualityCreate, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    created = log_quality(q.batch_id, q.operator_id, q.errors)
+    return {"id": created.id}
+
+
+@app.get("/dashboard", response_model=dict)
+async def api_dashboard(current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    daily_totals = {}
+    for log in database['performance_logs']:
+        if log.end_time:
+            day = log.end_time.date().isoformat()
+            daily_totals[day] = daily_totals.get(day, 0) + log.items_processed
+
+    batch_stats = {}
+    for log in database['performance_logs']:
+        if log.end_time:
+            duration = (log.end_time - log.start_time).total_seconds()
+            data = batch_stats.setdefault(log.batch_id, {"time": 0, "items": 0})
+            data["time"] += duration
+            data["items"] += log.items_processed
+    avg_time_per_item = {
+        bid: (d["time"] / d["items"] if d["items"] else 0)
+        for bid, d in batch_stats.items()
+    }
+
+    user_stats = {}
+    for log in database['performance_logs']:
+        if log.end_time:
+            hours = (log.end_time - log.start_time).total_seconds() / 3600
+            stats = user_stats.setdefault(log.user_id, {"items": 0, "hours": 0.0})
+            stats["items"] += log.items_processed
+            stats["hours"] += hours
+    leaderboard = [
+        {
+            "user_id": uid,
+            "items_per_hour": (s["items"] / s["hours"] if s["hours"] else 0),
+        }
+        for uid, s in user_stats.items()
+    ]
+    leaderboard.sort(key=lambda x: x["items_per_hour"], reverse=True)
+
+    return {
+        "daily_totals": daily_totals,
+        "average_time_per_item": avg_time_per_item,
+        "leaderboard": leaderboard,
+    }

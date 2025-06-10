@@ -1,6 +1,6 @@
 # BPO Operations Management Tool
 
-This repository contains a minimal implementation of the Phase 1 MVP for a BPO Operations Management Tool. It is built with **FastAPI** and uses an in-memory data store. The focus is on demonstrating the basic workflow management features.
+This repository contains a minimal implementation of a BPO Operations Management Tool. It is built with **FastAPI** and uses an in-memory data store. The project currently implements features from Phases 1 and 2 of the development plan.
 
 ## Features
 
@@ -8,6 +8,9 @@ This repository contains a minimal implementation of the Phase 1 MVP for a BPO O
 - Admin endpoints to create, edit, and deactivate users.
 - Project and batch creation with status tracking.
 - Operators can start and stop timers on batches to log their work time and item counts.
+- Managers can assign operators to batches and create work shifts.
+- A simple dashboard aggregates productivity metrics.
+- Validation errors can be logged against a batch and operator.
 
 ## Running the server
 
