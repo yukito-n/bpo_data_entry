@@ -24,3 +24,13 @@ The API will be available at `http://localhost:8000` and the interactive docs ca
 A default administrator account is created automatically with username `admin` and password `admin123`. Use these credentials to log in and create additional users.
 
 This is an MVP using an in-memory database and is not meant for production use.
+
+## Configuration
+
+The application reads several environment variables using `pydantic-settings`:
+
+- `SECRET_KEY` - secret used to sign JWT tokens.
+- `DATABASE_URL` - connection string for the database.
+- `APP_ENV` - name of the environment (e.g. `development` or `production`).
+
+You can define these variables in a `.env` file for local development or set them in your deployment environment.
