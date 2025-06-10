@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
+import csv
+import io
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -17,6 +19,8 @@ from .models import (
     Assignment,
     Shift,
     QualityLog,
+    Issue,
+    Article,
     database,
     get_user_by_username,
 )
@@ -33,6 +37,13 @@ from .models import (
     create_shift,
     get_shifts_for_user,
     log_quality,
+    error_counts_by_operator,
+    error_counts_by_project,
+    create_issue,
+    update_issue_status,
+    get_issues,
+    create_article,
+    list_articles,
 )
 from .models import get_batch, log_performance
 
@@ -126,7 +137,22 @@ class ShiftCreate(BaseModel):
 class QualityCreate(BaseModel):
     batch_id: int
     operator_id: int
-    errors: int
+    error_type: str
+
+
+class IssueCreate(BaseModel):
+    batch_id: int
+    description: str
+    assigned_to: int
+
+
+class IssueUpdate(BaseModel):
+    status: str
+
+
+class ArticleCreate(BaseModel):
+    title: str
+    content: str
 
 
 def verify_password(plain_password, hashed_password):
@@ -330,8 +356,102 @@ async def api_get_shifts(user_id: Optional[int] = None, current_user: User = Dep
 async def api_log_quality(q: QualityCreate, current_user: User = Depends(get_current_user)):
     if current_user.role not in ["Admin", "Manager"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    created = log_quality(q.batch_id, q.operator_id, q.errors)
+    created = log_quality(q.batch_id, q.operator_id, q.error_type)
     return {"id": created.id}
+
+
+@app.get("/quality/stats", response_model=dict)
+async def api_quality_stats(current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return {
+        "by_operator": error_counts_by_operator(),
+        "by_project": error_counts_by_project(),
+    }
+
+
+@app.post("/issues", response_model=dict)
+async def api_create_issue(issue: IssueCreate, current_user: User = Depends(get_current_user)):
+    if current_user.role != "Operator":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    created = create_issue(issue.batch_id, issue.description, current_user.id, issue.assigned_to)
+    return {"id": created.id}
+
+
+@app.post("/issues/{issue_id}/status", response_model=dict)
+async def api_update_issue_status(issue_id: int, data: IssueUpdate, current_user: User = Depends(get_current_user)):
+    issue = next((i for i in database['issues'] if i.id == issue_id), None)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    if current_user.role not in ["Admin", "Manager"] and current_user.id != issue.assigned_to:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    update_issue_status(issue, data.status)
+    return {"status": issue.status}
+
+
+@app.get("/issues", response_model=List[dict])
+async def api_get_issues_endpoint(current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    issues = get_issues(current_user.id if current_user.role == "Manager" else None)
+    return [
+        {
+            "id": i.id,
+            "batch_id": i.batch_id,
+            "description": i.description,
+            "status": i.status,
+            "assigned_to": i.assigned_to,
+        }
+        for i in issues
+    ]
+
+
+@app.post("/articles", response_model=dict)
+async def api_create_article(article: ArticleCreate, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    created = create_article(article.title, article.content)
+    return {"id": created.id}
+
+
+@app.get("/articles", response_model=List[dict])
+async def api_list_articles(current_user: User = Depends(get_current_user)):
+    arts = list_articles()
+    return [
+        {"id": a.id, "title": a.title, "content": a.content}
+        for a in arts
+    ]
+
+
+@app.get("/report")
+async def api_report(month: str, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    year, mon = map(int, month.split("-"))
+    start = datetime(year, mon, 1)
+    if mon == 12:
+        end = datetime(year + 1, 1, 1)
+    else:
+        end = datetime(year, mon + 1, 1)
+    user_stats = {}
+    for log in database['performance_logs']:
+        if log.end_time and start <= log.end_time < end:
+            hours = (log.end_time - log.start_time).total_seconds() / 3600
+            stats = user_stats.setdefault(log.user_id, {"items": 0, "hours": 0.0, "errors": 0})
+            stats["items"] += log.items_processed
+            stats["hours"] += hours
+    for q in database['quality_logs']:
+        stats = user_stats.setdefault(q.operator_id, {"items": 0, "hours": 0.0, "errors": 0})
+        stats["errors"] += 1
+    HOURLY_RATE = 10
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["user_id", "items", "hours", "errors", "cost"])
+    for uid, s in user_stats.items():
+        cost = s["hours"] * HOURLY_RATE
+        writer.writerow([uid, s["items"], f"{s['hours']:.2f}", s["errors"], f"{cost:.2f}"])
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv")
 
 
 @app.get("/dashboard", response_model=dict)
@@ -372,8 +492,24 @@ async def api_dashboard(current_user: User = Depends(get_current_user)):
     ]
     leaderboard.sort(key=lambda x: x["items_per_hour"], reverse=True)
 
+    error_counts = error_counts_by_operator()
+    error_rates = {
+        uid: (
+            sum(types.values()) / user_stats.get(uid, {}).get("items", 1)
+        )
+        for uid, types in error_counts.items()
+    }
+
+    HOURLY_RATE = 10
+    cost_analysis = {
+        uid: user_stats[uid]["hours"] * HOURLY_RATE
+        for uid in user_stats
+    }
+
     return {
         "daily_totals": daily_totals,
         "average_time_per_item": avg_time_per_item,
         "leaderboard": leaderboard,
+        "error_rates": error_rates,
+        "cost_analysis": cost_analysis,
     }

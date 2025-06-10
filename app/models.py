@@ -11,6 +11,8 @@ database = {
     'assignments': [],
     'shifts': [],
     'quality_logs': [],
+    'issues': [],
+    'articles': [],
 }
 
 
@@ -150,10 +152,83 @@ class QualityLog:
     id: int
     batch_id: int
     operator_id: int
-    errors: int
+    error_type: str
 
 
-def log_quality(batch_id: int, operator_id: int, errors: int) -> QualityLog:
-    qlog = QualityLog(id=len(database['quality_logs']) + 1, batch_id=batch_id, operator_id=operator_id, errors=errors)
+@dataclass
+class Issue:
+    id: int
+    batch_id: int
+    description: str
+    status: str
+    created_by: int
+    assigned_to: int
+    created_at: datetime
+
+
+def create_issue(batch_id: int, description: str, created_by: int, assigned_to: int) -> Issue:
+    issue = Issue(
+        id=len(database['issues']) + 1,
+        batch_id=batch_id,
+        description=description,
+        status='Open',
+        created_by=created_by,
+        assigned_to=assigned_to,
+        created_at=datetime.utcnow(),
+    )
+    database.setdefault('issues', []).append(issue)
+    return issue
+
+
+def update_issue_status(issue: Issue, status: str):
+    issue.status = status
+    return issue
+
+
+def get_issues(assigned_to: Optional[int] = None) -> List[Issue]:
+    issues = database.get('issues', [])
+    if assigned_to is not None:
+        return [i for i in issues if i.assigned_to == assigned_to]
+    return issues
+
+
+@dataclass
+class Article:
+    id: int
+    title: str
+    content: str
+
+
+def create_article(title: str, content: str) -> Article:
+    article = Article(id=len(database.setdefault('articles', [])) + 1, title=title, content=content)
+    database['articles'].append(article)
+    return article
+
+
+def list_articles() -> List[Article]:
+    return database.get('articles', [])
+
+
+def log_quality(batch_id: int, operator_id: int, error_type: str) -> QualityLog:
+    qlog = QualityLog(id=len(database['quality_logs']) + 1, batch_id=batch_id, operator_id=operator_id, error_type=error_type)
     database['quality_logs'].append(qlog)
     return qlog
+
+
+def error_counts_by_operator() -> dict:
+    counts = {}
+    for q in database['quality_logs']:
+        op = counts.setdefault(q.operator_id, {})
+        op[q.error_type] = op.get(q.error_type, 0) + 1
+    return counts
+
+
+def error_counts_by_project() -> dict:
+    counts = {}
+    for q in database['quality_logs']:
+        batch = get_batch(q.batch_id)
+        if batch:
+            proj = counts.setdefault(batch.project_id, {})
+            proj[q.error_type] = proj.get(q.error_type, 0) + 1
+    return counts
+

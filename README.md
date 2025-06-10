@@ -1,6 +1,6 @@
 # BPO Operations Management Tool
 
-This repository contains a minimal implementation of a BPO Operations Management Tool. It is built with **FastAPI** and uses an in-memory data store. The project currently implements features from Phases 1 and 2 of the development plan.
+This repository contains a minimal implementation of a BPO Operations Management Tool. It is built with **FastAPI** and uses an in-memory data store. The project currently implements features from Phases 1-3 of the development plan.
 
 ## Features
 
@@ -10,7 +10,11 @@ This repository contains a minimal implementation of a BPO Operations Management
 - Operators can start and stop timers on batches to log their work time and item counts.
 - Managers can assign operators to batches and create work shifts.
 - A simple dashboard aggregates productivity metrics.
-- Validation errors can be logged against a batch and operator.
+- Validation errors can be logged against a batch and operator with categorized error types.
+- Issue tracking allows operators to flag documents for manager review.
+- Managers can create knowledge base articles searchable by all users.
+- An analytics endpoint reports error rates, performance trends, and cost estimates.
+- A monthly CSV performance report can be generated.
 
 ## Running the server
 

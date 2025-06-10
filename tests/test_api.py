@@ -99,7 +99,7 @@ def test_phase2_features():
         assert resp.status_code == 200
 
         # Log quality
-        resp = client.post('/quality', json={'batch_id': batch_id, 'operator_id': op_id, 'errors': 1}, headers=admin_headers)
+        resp = client.post('/quality', json={'batch_id': batch_id, 'operator_id': op_id, 'error_type': 'Typo'}, headers=admin_headers)
         assert resp.status_code == 200
 
         # Dashboard
@@ -107,3 +107,22 @@ def test_phase2_features():
         assert resp.status_code == 200
         data = resp.json()
         assert 'leaderboard' in data
+
+        # Quality stats
+        resp = client.get('/quality/stats', headers=admin_headers)
+        assert resp.status_code == 200
+        assert 'by_operator' in resp.json()
+
+        # Create issue by operator
+        resp = client.post('/issues', json={'batch_id': batch_id, 'description': 'Illegible data', 'assigned_to': 1}, headers=op_headers)
+        assert resp.status_code == 200
+        issue_id = resp.json()['id']
+        # Manager resolves
+        resp = client.post(f'/issues/{issue_id}/status', json={'status': 'Resolved'}, headers=admin_headers)
+        assert resp.status_code == 200
+
+        # Create knowledge article
+        resp = client.post('/articles', json={'title': 'Guide', 'content': 'Use OCR'}, headers=admin_headers)
+        assert resp.status_code == 200
+        resp = client.get('/articles', headers=op_headers)
+        assert resp.status_code == 200
