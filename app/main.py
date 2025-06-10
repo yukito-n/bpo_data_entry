@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import csv
 import io
+import os
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -53,9 +54,10 @@ from .models import (
 )
 from .models import get_batch, log_performance
 
-SECRET_KEY = "secret"
+SECRET_KEY = os.getenv("SECRET_KEY", "change_this_secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+APP_ENV = os.getenv("APP_ENV", "development")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -119,6 +121,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+if APP_ENV.lower() == "test":
+    # Serve additional pages when running in a test environment
+    app.mount("/test", StaticFiles(directory="app/static/test", html=True), name="test")
 
 
 @app.get("/ui")

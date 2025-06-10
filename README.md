@@ -25,12 +25,17 @@ This repository contains a minimal implementation of a BPO Operations Management
 
 ## Running the server
 
-Install the dependencies and run the FastAPI server from the project root:
+Install the dependencies and run the FastAPI server from the project root.  Set
+`SECRET_KEY` to a secure value in production and optionally specify `APP_ENV=test`
+to enable the test pages under `/test`:
 
 ```bash
 pip install -r requirements.txt
 cd path/to/bpo_data_entry
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Example for the test environment
+APP_ENV=test uvicorn app.main:app
 ```
 
 The API will be available at `http://localhost:8000` and the interactive docs can be accessed at `/docs`.
