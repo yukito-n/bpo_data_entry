@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+bcrypt==3.2.0
+passlib[bcrypt]
+httpx
+python-multipart
